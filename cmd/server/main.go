@@ -1,12 +1,19 @@
 package main
 
 import (
-	"distributed-system-in-go/internal/server"
+	"dsingo/internal/server"
+	"fmt"
 	"net/http"
 )
 
 func main() {
 	recordLogger := server.NewLog()
-	http.ListenAndServe(":8080", server.New(recordLogger).Handle())
+	srvr := server.New(recordLogger)
+	errChan := make(chan error, 0)
 
+	go func() {
+		errChan <- http.ListenAndServe(":8080", srvr.Handle())
+	}()
+
+	fmt.Println(<- errChan)
 }

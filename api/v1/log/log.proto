@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package log.v1;
+
+option go_package = "distributed-system-in-go/api/v1/log";
+
+message Record {
+	uint64 offset = 1;
+	bytes value = 2;
+}

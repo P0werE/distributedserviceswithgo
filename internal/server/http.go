@@ -1,11 +1,13 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
-	"github.com/go-gin/gin"
+	"github.com/gin-gonic/gin"
 )
 
 type (
@@ -21,8 +23,11 @@ func New(recordrepo *Log) *server {
 func (s *server) Handle() http.Handler {
 	router := gin.Default()
 
-	router.GET("/", func(c *gin.Context) {
-		s.HandleConsume(c.Writer, c.Request)
+
+	router.GET("/:offset", func(c *gin.Context) {
+		offset := c.Param("offset")
+		ctx := context.WithValue(c.Request.Context(), "offset", offset)
+		s.HandleConsume(c.Writer, c.Request.WithContext(ctx))
 	})
 
 	router.POST("/", func(c *gin.Context) {
@@ -33,9 +38,10 @@ func (s *server) Handle() http.Handler {
 }
 
 func (s *server) handleProduce(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
 	type (
 		Request struct {
-			Record Record `json:"record"`
+			Record []byte `json:"record"`
 		}
 
 		Response struct {
@@ -51,7 +57,8 @@ func (s *server) handleProduce(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	offset, appendErr := s.recordRepo.Append(r.Record)
+
+	offset, appendErr := s.recordRepo.Append(Record{Value: r.Record})
 	if appendErr != nil {
 		http.Error(w, appendErr.Error(), http.StatusInternalServerError)
 		return
@@ -65,26 +72,22 @@ func (s *server) handleProduce(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *server) HandleConsume(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	type (
-		Request struct {
-			Offset uint64 `json:"offset"`
-		}
-
 		Response struct {
 			Record Record `json:"record"`
 		}
 	)
 
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
 
-	var req Request
-	if decoderErr := decoder.Decode(&req); decoderErr != nil {
-		http.Error(w, decoderErr.Error(), http.StatusBadRequest)
+	offsetstr, ok  := r.Context().Value("offset").(string)
+	offset, encodeErr := strconv.Atoi(offsetstr)
+	if encodeErr  != nil || !ok{
+		http.Error(w, encodeErr.Error(), http.StatusBadRequest)
 		return
 	}
 
-	record, readErr := s.recordRepo.Read(req.Offset)
+	record, readErr := s.recordRepo.Read(uint64(offset))
 	if readErr != nil {
 		statusCode := http.StatusInternalServerError
 		if errors.Is(readErr, ErrOffsetNotFound) {
