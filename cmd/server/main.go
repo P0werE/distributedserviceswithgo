@@ -8,5 +8,4 @@ import (
 func main() {
 	recordLogger := server.NewLog()
 	http.ListenAndServe(":8080", server.New(recordLogger).Handle())
-
 }
